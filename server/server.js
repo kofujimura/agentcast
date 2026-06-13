@@ -121,6 +121,7 @@ app.post('/push', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/healthz', (_req, res) => res.json({ ok: true, viewers: wss.clients.size }));
+const VERSION = require('./package.json').version;
+app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION, viewers: wss.clients.size }));
 
 server.listen(PORT, () => console.log(`live-view server listening on :${PORT}`));

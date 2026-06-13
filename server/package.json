@@ -1,6 +1,6 @@
 {
   "name": "live-view-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Realtime viewer for AI coding agent output (console mirror + HTML pushes)",
   "main": "server.js",
   "scripts": {

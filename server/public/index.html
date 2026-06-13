@@ -183,7 +183,6 @@
       <div id="html-tabs"></div>
       <div id="html-frame-wrap">
         <div class="empty-note" id="html-empty">まだ出力がありません</div>
-        <iframe id="html-frame" sandbox="allow-scripts" style="display:none"></iframe>
       </div>
     </section>
 
@@ -195,8 +194,9 @@
   const $ = (id) => document.getElementById(id);
   const log = $('console-log');
   const tabs = $('html-tabs');
-  const frame = $('html-frame');
+  const frameWrap = $('html-frame-wrap');
   const htmlEmpty = $('html-empty');
+  let frame = null;
 
   // ---- pane visibility ----
   const panes = {
@@ -267,8 +267,14 @@
     if (!item) return;
     activeId = id;
     htmlEmpty.style.display = 'none';
-    frame.style.display = 'block';
+    // recreate the iframe each time: WebKit doesn't reliably re-render
+    // when srcdoc is reassigned on a sandboxed iframe
+    if (frame) frame.remove();
+    frame = document.createElement('iframe');
+    frame.id = 'html-frame';
+    frame.setAttribute('sandbox', 'allow-scripts');
     frame.srcdoc = item.content;
+    frameWrap.appendChild(frame);
     renderTabs();
   }
   function addHtml(item) {
@@ -299,7 +305,7 @@
         activeId = null;
         followLatest = true;
         tabs.innerHTML = '';
-        frame.style.display = 'none';
+        if (frame) { frame.remove(); frame = null; }
         htmlEmpty.style.display = 'flex';
         for (const c of ev.console || []) addConsoleLine(c);
         for (const h of ev.html || []) addHtml(h);
