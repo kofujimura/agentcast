@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live View</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+  }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+  .status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+  .dot.connected { background: var(--green); }
+  .spacer { flex: 1; }
+  .toggle-btn {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .toggle-btn.active { color: var(--text); border-color: var(--accent); background: rgba(88,166,255,.1); }
+  .toggle-btn:hover { color: var(--text); }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+  }
+  .pane.hidden { display: none; }
+  #pane-console { border-right: 1px solid var(--border); }
+  #pane-console.hidden + #pane-html { border-left: none; }
+
+  .pane-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    flex: 0 0 auto;
+  }
+  .pane-header .title { font-weight: 600; color: var(--text); }
+  .close-btn {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .close-btn:hover { color: var(--text); background: rgba(255,255,255,.08); }
+
+  /* console pane */
+  #console-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 14px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .line { white-space: pre-wrap; word-break: break-word; margin-bottom: 2px; }
+  .line .ts { color: #484f58; margin-right: 8px; }
+  .line.user .body { color: #79c0ff; }
+  .line.user .body::before { content: "❯ "; color: var(--accent); }
+  .line.assistant .body { color: var(--text); }
+  .line.assistant .body::before { content: "● "; color: var(--green); }
+  .line.tool_use .body { color: var(--yellow); }
+  .line.tool_use .body::before { content: "⚙ "; }
+  .line.tool_result .body { color: var(--muted); }
+  .line.tool_result .body::before { content: "  ⮑ "; }
+  .line.status .body, .line.info .body { color: var(--muted); font-style: italic; }
+
+  /* html pane */
+  #html-tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 6px 8px 0;
+    background: var(--panel);
+    flex: 0 0 auto;
+  }
+  #html-tabs:empty { display: none; }
+  .tab {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tab.active { color: var(--text); background: var(--bg); border-color: var(--accent); }
+  #html-frame-wrap { flex: 1; min-height: 0; background: #fff; }
+  #html-frame { width: 100%; height: 100%; border: none; display: block; }
+  .empty-note {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--muted);
+    font-size: 13px;
+    background: var(--bg);
+  }
+  #all-closed {
+    flex: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Live View</h1>
+    <div class="status"><span class="dot" id="conn-dot"></span><span id="conn-text">接続中...</span></div>
+    <div class="spacer"></div>
+    <button class="toggle-btn active" id="toggle-console">Console</button>
+    <button class="toggle-btn active" id="toggle-html">Output</button>
+  </header>
+
+  <main>
+    <section class="pane" id="pane-console">
+      <div class="pane-header">
+        <span class="title">Console</span>
+        <button class="close-btn" data-close="console" title="閉じる">×</button>
+      </div>
+      <div id="console-log"></div>
+    </section>
+
+    <section class="pane" id="pane-html">
+      <div class="pane-header">
+        <span class="title">Output</span>
+        <button class="close-btn" data-close="html" title="閉じる">×</button>
+      </div>
+      <div id="html-tabs"></div>
+      <div id="html-frame-wrap">
+        <div class="empty-note" id="html-empty">まだ出力がありません</div>
+        <iframe id="html-frame" sandbox="allow-scripts" style="display:none"></iframe>
+      </div>
+    </section>
+
+    <div id="all-closed">両方のペインが閉じています。上のボタンで再表示できます。</div>
+  </main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const log = $('console-log');
+  const tabs = $('html-tabs');
+  const frame = $('html-frame');
+  const htmlEmpty = $('html-empty');
+
+  // ---- pane visibility ----
+  const panes = {
+    console: { el: $('pane-console'), btn: $('toggle-console') },
+    html: { el: $('pane-html'), btn: $('toggle-html') },
+  };
+  function setPane(name, visible) {
+    panes[name].el.classList.toggle('hidden', !visible);
+    panes[name].btn.classList.toggle('active', visible);
+    localStorage.setItem('pane-' + name, visible ? '1' : '0');
+    const anyVisible = !panes.console.el.classList.contains('hidden') ||
+                       !panes.html.el.classList.contains('hidden');
+    $('all-closed').style.display = anyVisible ? 'none' : 'flex';
+  }
+  function paneVisible(name) { return !panes[name].el.classList.contains('hidden'); }
+  for (const name of ['console', 'html']) {
+    panes[name].btn.addEventListener('click', () => setPane(name, !paneVisible(name)));
+    if (localStorage.getItem('pane-' + name) === '0') setPane(name, false);
+  }
+  document.querySelectorAll('.close-btn').forEach((b) =>
+    b.addEventListener('click', () => setPane(b.dataset.close, false)));
+
+  // ---- console rendering ----
+  const MAX_LINES = 1000;
+  let autoScroll = true;
+  log.addEventListener('scroll', () => {
+    autoScroll = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
+  });
+  function fmtTime(ts) {
+    const d = new Date(ts);
+    return d.toTimeString().slice(0, 8);
+  }
+  function addConsoleLine(ev) {
+    const div = document.createElement('div');
+    div.className = 'line ' + (ev.subtype || 'info');
+    const ts = document.createElement('span');
+    ts.className = 'ts';
+    ts.textContent = fmtTime(ev.ts);
+    const body = document.createElement('span');
+    body.className = 'body';
+    body.textContent = ev.text;
+    div.append(ts, body);
+    log.appendChild(div);
+    while (log.children.length > MAX_LINES) log.removeChild(log.firstChild);
+    if (autoScroll) log.scrollTop = log.scrollHeight;
+  }
+
+  // ---- html rendering ----
+  const htmlItems = [];   // {id, title, content, ts}
+  let activeId = null;
+  let followLatest = true;
+  function renderTabs() {
+    tabs.innerHTML = '';
+    for (const item of htmlItems) {
+      const b = document.createElement('button');
+      b.className = 'tab' + (item.id === activeId ? ' active' : '');
+      b.textContent = item.title;
+      b.title = item.title + ' (' + fmtTime(item.ts) + ')';
+      b.addEventListener('click', () => {
+        followLatest = item === htmlItems[htmlItems.length - 1];
+        showHtml(item.id);
+      });
+      tabs.appendChild(b);
+    }
+  }
+  function showHtml(id) {
+    const item = htmlItems.find((i) => i.id === id);
+    if (!item) return;
+    activeId = id;
+    htmlEmpty.style.display = 'none';
+    frame.style.display = 'block';
+    frame.srcdoc = item.content;
+    renderTabs();
+  }
+  function addHtml(item) {
+    htmlItems.push(item);
+    while (htmlItems.length > 30) htmlItems.shift();
+    if (followLatest || activeId === null) showHtml(item.id);
+    else renderTabs();
+  }
+
+  // ---- websocket ----
+  const dot = $('conn-dot');
+  const connText = $('conn-text');
+  let retryMs = 1000;
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(proto + '//' + location.host + '/ws?role=viewer');
+    ws.onopen = () => {
+      dot.classList.add('connected');
+      connText.textContent = '接続済み';
+      retryMs = 1000;
+    };
+    ws.onmessage = (e) => {
+      let ev;
+      try { ev = JSON.parse(e.data); } catch { return; }
+      if (ev.type === 'init' || ev.type === 'reset') {
+        log.innerHTML = '';
+        htmlItems.length = 0;
+        activeId = null;
+        followLatest = true;
+        tabs.innerHTML = '';
+        frame.style.display = 'none';
+        htmlEmpty.style.display = 'flex';
+        for (const c of ev.console || []) addConsoleLine(c);
+        for (const h of ev.html || []) addHtml(h);
+      } else if (ev.type === 'console') {
+        addConsoleLine(ev);
+      } else if (ev.type === 'html') {
+        addHtml(ev);
+      } else if (ev.type === 'status') {
+        addConsoleLine({ subtype: 'status', text: '[' + ev.text + ']', ts: ev.ts });
+      }
+    };
+    ws.onclose = () => {
+      dot.classList.remove('connected');
+      connText.textContent = '再接続中...';
+      setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, 15000);
+    };
+    ws.onerror = () => ws.close();
+  }
+  connect();
+})();
+</script>
+</body>
+</html>

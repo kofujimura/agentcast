@@ -1,0 +1,16 @@
+{
+  "name": "live-view-server",
+  "version": "1.0.0",
+  "description": "Realtime viewer for AI coding agent output (console mirror + HTML pushes)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}
