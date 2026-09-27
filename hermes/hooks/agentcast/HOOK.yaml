@@ -1,0 +1,7 @@
+name: agentcast
+description: Mirror Hermes gateway turns (Discord etc.) to the agentcast live viewer
+events:
+  - agent:start
+  - agent:step
+  - agent:end
+  - session:reset

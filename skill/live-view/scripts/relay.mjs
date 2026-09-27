@@ -13,22 +13,9 @@
 import { readFileSync, existsSync, statSync, readdirSync, openSync, readSync, closeSync, writeFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, basename } from 'node:path';
+import { loadConfig, readHtmlCache } from './lib.mjs';
 
-function loadConfig() {
-  let url = process.env.LIVE_VIEW_URL;
-  let token = process.env.LIVE_VIEW_TOKEN;
-  const file = join(homedir(), '.config', 'live-view.json');
-  if ((!url || !token) && existsSync(file)) {
-    const cfg = JSON.parse(readFileSync(file, 'utf8'));
-    url = url || cfg.url;
-    token = token || cfg.token;
-  }
-  if (!url || !token) {
-    console.error('Missing config. Set LIVE_VIEW_URL and LIVE_VIEW_TOKEN, or create ~/.config/live-view.json');
-    process.exit(1);
-  }
-  return { url: url.replace(/\/$/, ''), token };
-}
+const SOURCE = 'claude-code';
 
 const args = process.argv.slice(2);
 let cwd = process.cwd();
@@ -43,7 +30,6 @@ for (let i = 0; i < args.length; i++) {
 const { url, token } = loadConfig();
 const wsUrl = url.replace(/^http/, 'ws') + '/ws?role=producer&token=' + encodeURIComponent(token);
 const projectDir = join(homedir(), '.claude', 'projects', resolve(cwd).replace(/[^A-Za-z0-9]/g, '-'));
-const htmlCacheDir = join(homedir(), '.cache', 'live-view', 'history');
 
 const PID_FILE = '/tmp/live-view-relay.pid';
 if (!once) writeFileSync(PID_FILE, String(process.pid));
@@ -80,7 +66,7 @@ function connect() {
 }
 function send(ev) {
   if (wsOpen && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ ts: Date.now(), ...ev }));
+    ws.send(JSON.stringify({ ts: Date.now(), source: SOURCE, ...ev }));
   }
   // not connected: drop silently — the replay on reconnect restores everything
 }
@@ -147,13 +133,9 @@ let offset = 0;
 let remainder = '';
 
 function replayHtmlCache() {
-  if (!existsSync(htmlCacheDir)) return;
-  const files = readdirSync(htmlCacheDir).filter((f) => f.endsWith('.json')).sort();
-  for (const f of files) {
-    try {
-      const { title, content } = JSON.parse(readFileSync(join(htmlCacheDir, f), 'utf8'));
-      send({ type: 'html', title, content });
-    } catch { /* skip corrupt cache entries */ }
+  // keys are stable, so permalinks shared earlier (e.g. in Discord) come back to life
+  for (const { key, title, content, source, ts } of readHtmlCache()) {
+    send({ type: 'html', key, title, content, source: source || SOURCE, ts });
   }
 }
 

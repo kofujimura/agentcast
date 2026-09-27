@@ -39,8 +39,10 @@ kill "$(cat /tmp/live-view-relay.pid)" 2>/dev/null && echo stopped || echo "not 
 成果物（レポート、グラフ、テーブルなど）をビューアの右ペインに表示する:
 
 ```bash
-node "$SKILL_DIR/scripts/push.mjs" --title "タイトル" path/to/output.html
+node "$SKILL_DIR/scripts/push.mjs" --source claude-code --title "タイトル" path/to/output.html
 ```
+
+出力の `URL: https://.../o/xxxx` が、その成果物だけを全画面で開ける共有リンク。サーバーが再起動しても、復元すれば同じリンクで開ける。
 
 stdinからも可: `echo "<h1>Hi</h1>" | node "$SKILL_DIR/scripts/push.mjs" --title "Quick"`
 
@@ -63,7 +65,7 @@ tail -5 /tmp/live-view-relay.log 2>/dev/null
 
 ## 振る舞いのルール
 
-- このスキルが有効化されたセッションでは、**視覚的な成果物（HTML・グラフ・レポート・比較表など）を生成したら、ユーザーに聞かずに毎回 push する**。タイトルは内容がわかる日本語で付ける。
+- このスキルが有効化されたセッションでは、**視覚的な成果物（HTML・グラフ・レポート・比較表など）を生成したら、ユーザーに聞かずに毎回 push する**。タイトルは内容がわかる日本語で付け、返信に共有リンクを添える。
 - HTMLは自己完結（インラインCSS/JS、外部CDN可）にする。ビューアは sandbox 付き iframe（allow-scripts）で描画するため、外部リソースはhttpsで読み込めるものに限る。
 - push が 401 を返したらトークン設定をユーザーに確認。接続エラーならサーバーURLとデプロイ状態を確認。
-- ミラーはClaude Code専用（トランスクリプトをtailするため）。push は Codex 等どのエージェントからでも使える。
+- ミラーはClaude Code専用（トランスクリプトをtailするため）。push は Codex 等どのエージェントからでも使える。Hermes Agent（Discord 等）のミラーは `hermes/` のゲートウェイフックが担当する。

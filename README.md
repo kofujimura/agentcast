@@ -26,6 +26,17 @@ render.yaml         Render Blueprint
 
 The local machine is the source of truth: on every (re)connect the relay sends a `reset` and replays the whole current session (plus the last 10 pushed HTML artifacts cached in `~/.cache/live-view/history`), so the server can be stateless and survive restarts.
 
+## Using with Hermes Agent (Discord)
+
+Discord carries the instructions and notifications; agentcast shows the visuals.
+
+- `bash hermes/install.sh` links a gateway hook and a skill into `~/.hermes`. Restart the gateway.
+- The hook mirrors each chat turn (request, tool-loop steps, reply) and shows a "working" indicator in the viewer header.
+- The skill makes Hermes push every visual deliverable and end its Discord reply with a share link (`/o/<key>`) that opens that output full screen on a phone.
+- Share links survive Render spin-downs: `restore.mjs` (or "ライブビュー復元" in chat) re-sends local history with stable keys.
+- `/?panes=output` shows only the Output pane (projector mode); `/?panes=console` only the log.
+- On the Codex app-server runtime, enable `[sandbox_workspace_write] network_access = true` in `~/.codex/config.toml` so pushes can reach the server, and set `AGENTCAST_CACHE_DIR` if `~/.cache` is not writable.
+
 ## Deploy (Render)
 
 1. Push this repository to GitHub and import it on Render via **New > Blueprint** (`render.yaml` is auto-detected and `PUSH_TOKEN` is auto-generated).

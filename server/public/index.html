@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Live View</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>agentcast</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -147,6 +147,57 @@
     font-size: 13px;
     background: var(--bg);
   }
+  /* sources & activity */
+  .src {
+    display: inline-block;
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px 5px;
+    margin-right: 6px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    vertical-align: 1px;
+  }
+  .src.hermes { color: #d2a8ff; border-color: #6e40c9; }
+  .src.claude-code { color: #79c0ff; border-color: #1f6feb; }
+  .line.user.from-chat .body::before { content: "✉ "; color: #d2a8ff; }
+  #activity { display: flex; gap: 8px; overflow: hidden; min-width: 0; }
+  .act {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text);
+    padding: 3px 10px; border-radius: 12px;
+    background: rgba(210,168,255,.12); border: 1px solid #6e40c9;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw;
+  }
+  .act .pulse { width: 7px; height: 7px; border-radius: 50%; background: #d2a8ff; flex: 0 0 auto;
+    animation: pulse 1.2s ease-in-out infinite; }
+  .act .detail { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .act .pulse { animation: none; } }
+  .pane-header a.link-btn, .pane-header button.link-btn {
+    background: transparent; border: 1px solid var(--border); border-radius: 5px;
+    color: var(--muted); font-size: 11px; padding: 2px 8px; text-decoration: none; cursor: pointer;
+  }
+  .pane-header .link-btn:hover { color: var(--text); border-color: var(--accent); }
+  .pane-header .link-btn[hidden] { display: none; }
+  #pane-html .close-btn { margin-left: 4px; }
+  #html-actions { margin-left: auto; display: flex; gap: 6px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* phones: stack panes, output gets the larger share */
+  @media (max-width: 720px) {
+    header { padding: 8px 10px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); flex-wrap: wrap; }
+    header h1 { display: none; }
+    #activity { order: 10; flex-basis: 100%; }
+    .act { max-width: 100%; }
+    main { flex-direction: column; }
+    #pane-console { border-right: none; border-bottom: 1px solid var(--border); flex: 0 0 38%; }
+    #pane-console.hidden { flex: 0; }
+    #pane-html { flex: 1; }
+    .tab { max-width: 140px; }
+  }
+
   #all-closed {
     flex: 1;
     display: none;
@@ -159,8 +210,9 @@
 </head>
 <body>
   <header>
-    <h1>Live View</h1>
+    <h1>agentcast</h1>
     <div class="status"><span class="dot" id="conn-dot"></span><span id="conn-text">接続中...</span></div>
+    <div id="activity" aria-live="polite"></div>
     <div class="spacer"></div>
     <button class="toggle-btn active" id="toggle-console">Console</button>
     <button class="toggle-btn active" id="toggle-html">Output</button>
@@ -178,6 +230,10 @@
     <section class="pane" id="pane-html">
       <div class="pane-header">
         <span class="title">Output</span>
+        <span id="html-actions">
+          <button class="link-btn" id="copy-link" hidden>リンクをコピー</button>
+          <a class="link-btn" id="open-link" target="_blank" rel="noopener" hidden>全画面で開く</a>
+        </span>
         <button class="close-btn" data-close="html" title="閉じる">×</button>
       </div>
       <div id="html-tabs"></div>
@@ -212,9 +268,15 @@
     $('all-closed').style.display = anyVisible ? 'none' : 'flex';
   }
   function paneVisible(name) { return !panes[name].el.classList.contains('hidden'); }
+  // ?panes=output / ?panes=console forces a single pane (projector, phone)
+  const forced = new URLSearchParams(location.search).get('panes');
   for (const name of ['console', 'html']) {
     panes[name].btn.addEventListener('click', () => setPane(name, !paneVisible(name)));
-    if (localStorage.getItem('pane-' + name) === '0') setPane(name, false);
+    if (forced) {
+      const want = forced === 'output' ? 'html' : forced;
+      panes[name].el.classList.toggle('hidden', name !== want);
+      panes[name].btn.classList.toggle('active', name === want);
+    } else if (localStorage.getItem('pane-' + name) === '0') setPane(name, false);
   }
   document.querySelectorAll('.close-btn').forEach((b) =>
     b.addEventListener('click', () => setPane(b.dataset.close, false)));
@@ -229,16 +291,35 @@
     const d = new Date(ts);
     return d.toTimeString().slice(0, 8);
   }
+  // "hermes:discord" -> {cls: "hermes", label: "Discord"}
+  function sourceInfo(source) {
+    const s = String(source || 'agent');
+    const [head, sub] = s.split(':');
+    const names = { 'claude-code': 'Claude Code', hermes: 'Hermes', codex: 'Codex', agent: 'agent' };
+    const subs = { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', cli: 'CLI' };
+    const label = sub ? (subs[sub] || sub) : (names[head] || head);
+    return { cls: head.replace(/[^a-z0-9-]/gi, ''), label, chat: !!sub && sub !== 'cli' };
+  }
+  const seenSources = new Set();
   function addConsoleLine(ev) {
     const div = document.createElement('div');
-    div.className = 'line ' + (ev.subtype || 'info');
+    const info = sourceInfo(ev.source);
+    div.className = 'line ' + (ev.subtype || 'info') + (info.chat ? ' from-chat' : '');
     const ts = document.createElement('span');
     ts.className = 'ts';
     ts.textContent = fmtTime(ev.ts);
     const body = document.createElement('span');
     body.className = 'body';
     body.textContent = ev.text;
-    div.append(ts, body);
+    if (ev.source) {
+      seenSources.add(ev.source);
+      const tag = document.createElement('span');
+      tag.className = 'src ' + info.cls;
+      tag.textContent = info.label;
+      div.append(ts, tag, body);
+    } else {
+      div.append(ts, body);
+    }
     log.appendChild(div);
     while (log.children.length > MAX_LINES) log.removeChild(log.firstChild);
     if (autoScroll) log.scrollTop = log.scrollHeight;
@@ -262,10 +343,33 @@
       tabs.appendChild(b);
     }
   }
+  const copyBtn = $('copy-link');
+  const openLink = $('open-link');
+  function updateLinks(item) {
+    const has = !!(item && item.key);
+    copyBtn.hidden = openLink.hidden = !has;
+    if (has) openLink.href = '/o/' + item.key;
+  }
+  copyBtn.addEventListener('click', async () => {
+    const item = htmlItems.find((i) => i.id === activeId);
+    if (!item || !item.key) return;
+    const url = location.origin + '/o/' + item.key;
+    try { await navigator.clipboard.writeText(url); copyBtn.textContent = 'コピーしました'; }
+    catch { prompt('リンク', url); }
+    setTimeout(() => { copyBtn.textContent = 'リンクをコピー'; }, 1500);
+  });
+  // #o=<key> in the URL pins that output (links posted to chat use this)
+  let pinnedKey = (location.hash.match(/o=([A-Za-z0-9_-]+)/) || [])[1] || null;
+  window.addEventListener('hashchange', () => {
+    pinnedKey = (location.hash.match(/o=([A-Za-z0-9_-]+)/) || [])[1] || null;
+    const it = pinnedKey && htmlItems.find((i) => i.key === pinnedKey);
+    if (it) { followLatest = false; showHtml(it.id); }
+  });
   function showHtml(id) {
     const item = htmlItems.find((i) => i.id === id);
     if (!item) return;
     activeId = id;
+    updateLinks(item);
     htmlEmpty.style.display = 'none';
     // recreate the iframe each time: WebKit doesn't reliably re-render
     // when srcdoc is reassigned on a sandboxed iframe
@@ -278,11 +382,40 @@
     renderTabs();
   }
   function addHtml(item) {
+    // same key = the same artifact re-sent (replay after a server restart)
+    if (item.key) {
+      const i = htmlItems.findIndex((h) => h.key === item.key);
+      if (i >= 0) {
+        const wasActive = htmlItems[i].id === activeId;
+        htmlItems.splice(i, 1);
+        if (wasActive) activeId = null;
+      }
+    }
     htmlItems.push(item);
     while (htmlItems.length > 30) htmlItems.shift();
+    if (pinnedKey && item.key === pinnedKey) { followLatest = false; showHtml(item.id); return; }
     if (followLatest || activeId === null) showHtml(item.id);
     else renderTabs();
   }
+
+  // ---- activity (which agent is working right now) ----
+  const actEl = $('activity');
+  const activity = new Map();
+  function renderActivity() {
+    actEl.innerHTML = '';
+    for (const [source, a] of activity) {
+      if (a.state !== 'working') continue;
+      const info = sourceInfo(source);
+      const chip = document.createElement('div');
+      chip.className = 'act';
+      const p = document.createElement('span'); p.className = 'pulse';
+      const t = document.createElement('span'); t.textContent = (a.label || info.label) + ' 作業中';
+      chip.append(p, t);
+      if (a.detail) { const d = document.createElement('span'); d.className = 'detail'; d.textContent = a.detail; chip.append(d); }
+      actEl.appendChild(chip);
+    }
+  }
+  function setActivity(a) { activity.set(a.source, a); renderActivity(); }
 
   // ---- websocket ----
   const dot = $('conn-dot');
@@ -307,12 +440,18 @@
         tabs.innerHTML = '';
         if (frame) { frame.remove(); frame = null; }
         htmlEmpty.style.display = 'flex';
+        updateLinks(null);
+        activity.clear();
+        for (const a of ev.activity || []) activity.set(a.source, a);
+        renderActivity();
         for (const c of ev.console || []) addConsoleLine(c);
         for (const h of ev.html || []) addHtml(h);
       } else if (ev.type === 'console') {
         addConsoleLine(ev);
       } else if (ev.type === 'html') {
         addHtml(ev);
+      } else if (ev.type === 'activity') {
+        setActivity(ev);
       } else if (ev.type === 'status') {
         addConsoleLine({ subtype: 'status', text: '[' + ev.text + ']', ts: ev.ts });
       }
