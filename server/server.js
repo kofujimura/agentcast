@@ -203,6 +203,9 @@ function permalinkPage(req, key, item) {
 <html lang="ja"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(title)} — agentcast</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="agentcast で生成された成果物${when ? '（' + esc(when.slice(0, 16).replace('T', ' ')) + ' UTC）' : ''}">
 <meta property="og:type" content="website">
